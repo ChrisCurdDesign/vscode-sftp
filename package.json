@@ -2,7 +2,7 @@
   "name": "ccd-sftp",
   "displayName": "CCD SFTP",
   "description": "SFTP/FTP sync",
-  "version": "1.18.1",
+  "version": "1.18.2",
   "publisher": "CCD-Studios",
   "author": "CCD <hello@ccdstudios.com> (https://github.com/ChrisCurdDesign)",
   "engines": {
@@ -714,6 +714,18 @@
           "command": "sftp.upload.changedFiles",
           "group": "sftp",
           "when": "sftp.enabled && scmProvider == git && scmResourceGroup == index && !gitFreshRepository"
+        }
+      ],
+      "scm/resourceState/context": [
+        {
+          "command": "sftp.upload.file",
+          "group": "sftp",
+          "when": "sftp.enabled && scmProvider == git && !gitFreshRepository"
+        },
+        {
+          "command": "sftp.upload.file.to.allProfiles",
+          "group": "sftp",
+          "when": "sftp.enabled && scmProvider == git && !gitFreshRepository"
         }
       ]
     },

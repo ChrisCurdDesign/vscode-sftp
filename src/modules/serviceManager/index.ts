@@ -99,8 +99,26 @@ export function createFileService(config: any, workspace: string) {
   service.name = config.name;
   service.setConfigValidator(validateConfig);
   service.setWatcherService(watcherService);
+  let transferBatchTotal = 0;
+  let transferBatchSuccess = 0;
+  let transferBatchType = '';
+  let transferBatchHadError = false;
+
+  function resetTransferBatch() {
+    transferBatchTotal = 0;
+    transferBatchSuccess = 0;
+    transferBatchType = '';
+    transferBatchHadError = false;
+  }
+
   service.beforeTransfer(task => {
     const { localFsPath, transferType } = task;
+    if (transferBatchTotal === 0) {
+      resetTransferBatch();
+    }
+
+    transferBatchTotal += 1;
+    transferBatchType = transferType;
     app.sftpBarItem.showMsg(
       `${transferType} ${path.basename(localFsPath)}`,
       simplifyPath(localFsPath)
@@ -114,13 +132,24 @@ export function createFileService(config: any, workspace: string) {
       logger.info(`cancel transfer ${localFsPath}`);
       app.sftpBarItem.showMsg(`cancelled ${filename}`, filepath, 2000 * 2);
     } else if (error) {
+      transferBatchHadError = true;
       // if ((error as any).reported !== true) {
       reportError(error, `when ${transferType} ${localFsPath}`);
       // }
       app.sftpBarItem.showMsg(`failed ${filename}`, filepath, 2000 * 2);
     } else {
       logger.info(`${transferType} ${localFsPath}`);
-      app.sftpBarItem.showMsg(`SFTP done ${filename}`, filepath, 2000 * 2);
+      transferBatchSuccess += 1;
+      if (transferBatchTotal > 0 && transferBatchSuccess === transferBatchTotal && !transferBatchHadError) {
+        const fileLabel = transferBatchSuccess === 1 ? 'file' : 'files';
+        const verb = transferBatchType === 'remote ➞ local' ? 'Downloaded' : 'Uploaded';
+        app.sftpBarItem.showMsg(
+          `SFTP ${verb} ${transferBatchSuccess} ${fileLabel} successfully`,
+          filepath,
+          2000 * 2
+        );
+        resetTransferBatch();
+      }
     }
   });
 
