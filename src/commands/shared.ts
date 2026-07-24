@@ -116,7 +116,120 @@ export function getActiveFolder() {
 }
 
 // selected file or activeTarget or configContext
-export function uriFromExplorerContextOrEditorContext(item, items): undefined | Uri | Uri[] {
+export function uriFromExplorerContextOrEditorContext(...args): undefined | Uri | Uri[] {
+  const [item, items] = args;
+
+  const getScmResourceUriValue = (value): unknown => {
+    if (!value) {
+      return;
+    }
+
+    if ((value as any).resourceUri) {
+      return (value as any).resourceUri;
+    }
+
+    if ((value as any)._resourceUri) {
+      return (value as any)._resourceUri;
+    }
+
+    return;
+  };
+
+  const isScmResourceState = (value): boolean => {
+    return !!getScmResourceUriValue(value);
+  };
+
+  const scmResourceUri = (value): Uri | undefined => {
+    if (!isScmResourceState(value)) {
+      return;
+    }
+
+    const rawUri: any = getScmResourceUriValue(value);
+
+    if (rawUri instanceof Uri) {
+      return rawUri;
+    }
+
+    const resourceUri: any = rawUri;
+
+    if (resourceUri && typeof resourceUri.fsPath === 'string') {
+      return Uri.file(resourceUri.fsPath);
+    }
+
+    if (resourceUri && typeof resourceUri.scheme === 'string' && typeof resourceUri.path === 'string') {
+      try {
+        const authority = resourceUri.authority ? `//${resourceUri.authority}` : '';
+        const query = resourceUri.query ? `?${resourceUri.query}` : '';
+        const fragment = resourceUri.fragment ? `#${resourceUri.fragment}` : '';
+        return Uri.parse(`${resourceUri.scheme}:${authority}${resourceUri.path}${query}${fragment}`);
+      } catch (_error) {
+        // continue to next strategy
+      }
+    }
+
+    if (resourceUri && typeof resourceUri.toString === 'function') {
+      try {
+        return Uri.parse(resourceUri.toString());
+      } catch (_error) {
+        return;
+      }
+    }
+
+    return;
+  };
+
+  const asUri = (value): Uri | undefined => {
+    if (value instanceof Uri) {
+      return value;
+    }
+
+    return scmResourceUri(value);
+  };
+
+  const asUriList = (value): Uri[] => {
+    if (!value) {
+      return [];
+    }
+
+    if (Array.isArray(value)) {
+      return value
+        .map(asUri)
+        .filter((uri): uri is Uri => !!uri);
+    }
+
+    if (Array.isArray((value as any).resourceStates)) {
+      return (value as any).resourceStates
+        .map(asUri)
+        .filter((uri): uri is Uri => !!uri);
+    }
+
+    if (Array.isArray((value as any)._resourceStates)) {
+      return (value as any)._resourceStates
+        .map(asUri)
+        .filter((uri): uri is Uri => !!uri);
+    }
+
+    const singleUri = asUri(value);
+    if (singleUri) {
+      return [singleUri];
+    }
+
+    return [];
+  };
+
+  const uniqUris = (uris: Uri[]): Uri[] => {
+    const set = new Set<string>();
+    return uris.filter(uri => {
+      const key = uri.toString(true);
+      if (set.has(key)) {
+        return false;
+      }
+
+      set.add(key);
+      return true;
+    });
+  };
+
   // from explorer or editor context
   if (item instanceof Uri) {
     if (Array.isArray(items) && items[0] instanceof Uri) {
@@ -132,6 +245,20 @@ export function uriFromExplorerContextOrEditorContext(item, items): undefined | 
       return items.map(_ => _.resource.uri);
     } else {
       return item.resource.uri;
+    }
+  } else if (isScmResourceState(item)) {
+    // from source control resource state context
+    const selectedUris = uniqUris(
+      args
+        .reduce((all, value) => all.concat(asUriList(value)), [])
+    );
+    if (selectedUris.length > 0) {
+      return selectedUris;
+    }
+
+    const uri = asUri(item);
+    if (uri) {
+      return uri;
     }
   }
 
